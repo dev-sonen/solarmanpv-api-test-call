@@ -14,7 +14,7 @@ app.get( '/' , async ( req , res ) => {
 
     try {
 
-        const obj = await axios( {
+        const obj = await axios( {  // get 'access_token'
             method: 'post',
             url: 'https://api.solarmanpv.com/account/v1.0/token',
             params: {
@@ -24,58 +24,118 @@ app.get( '/' , async ( req , res ) => {
             data: {
                 appSecret: process.env.APP_SECRET,
                 email: process.env.CREDENTIALS_EMAIL,
-                password: process.env.CREDENTIALS_PASSWORD      // -> SHA256
+                password: process.env.CREDENTIALS_PASSWORD  // SHA256
             },
             headers: {
                 'Content-Type': 'application/json'
             }
         } )
         .then( async res => {
+
+            const { data } = res
+
+            const obj = await axios( {  // get 'orgId' base on the returned 'access_token'
+                method: 'post',
+                url: 'https://api.solarmanpv.com/account/v1.0/info',
+                params: {
+                    language: 'en'
+                },
+                headers: {
+                    'Authorization': `bearer ${ data.access_token }`,
+                    'Content-Type': 'application/json'
+                }
+            } )
+            .then( res => res )
+            .catch( err => {
+                if( err ) {
+                
+                    console.error( err.message )
+                    return null
+        
+                }
+            } )
+
+            const [ org ] = obj.data.orgInfoList
+
+            return { data: org }
+            
+        } )
+        .then( async res => {
+
+            const { data } = res
+
+            const obj = await axios( {  // get 'access_token' for 'business relation', passing 'orgId' as a body.
+                method: 'post',
+                url: 'https://api.solarmanpv.com/account/v1.0/token',
+                params: {
+                    appId: process.env.APP_ID,
+                    language: 'en'
+                },
+                data: {
+                    orgId: data.companyId,
+                    appSecret: process.env.APP_SECRET,
+                    email: process.env.CREDENTIALS_EMAIL,
+                    password: process.env.CREDENTIALS_PASSWORD  // SHA256
+                },
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            } )
+            .then( res => res )
+            .catch( err => {
+                if( err ) {
+                
+                    console.error( err.message )
+                    return null
+        
+                }
+            } )
+
+            const { access_token } = obj.data
+
+            return { 
+                data: {
+                    access_token: access_token
+                } 
+            }
+
+        } )
+        .then( async res => {
     
             const { data } = res
 
-            console.log( data )     // displayed on the CLI.
+            return await axios( {   // get plant list with access_token for business relation.
+                method: 'post',
+                url: `https://api.solarmanpv.com/station/v1.0/list`,
+                params: {
+                    language: 'en'
+                },
+                data: {
+                    page: 1,
+                    size: 20
+                },
+                headers: {
+                    'Authorization': `bearer ${ data.access_token }`,
+                    'Content-Type': 'application/json'
+                }
+            } )
+            .then( res => {
+        
+                const { data } = res
 
-            if( data.success === true ) {
-
-                return await axios( {
-                    method: 'post',
-                    url: `https://api.solarmanpv.com/station/v1.0/list`,
-                    params: {
-                        language: 'en'
-                    },
-                    data: {
-                        page: 1,
-                        size: 20
-                    },
-                    headers: {
-                        'Authorization': `bearer ${ data.access_token }`,
-                        'Content-Type': 'application/json'
-                    }
-                } )
-                .then( res => {
-            
-                    const { data } = res
-
-                    console.log( data )     // displayed on the CLI.
+                return data
+        
+            } )
+            .catch( err => {
+        
+                if( err ) {
                     
-                    return data
-            
-                } )
-                .catch( err => {
-            
-                    if( err ) {
-                        
-                        console.error( err.message )
-                        return null
-            
-                    }
-            
-                } )
-
-            }
-
-            return null
+                    console.error( err.message )
+                    return null
+        
+                }
+        
+            } )
     
         } )
         .catch( err => {
